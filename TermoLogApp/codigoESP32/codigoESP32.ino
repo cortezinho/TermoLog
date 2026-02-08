@@ -16,8 +16,11 @@ void handleData() {
   float h = dht.readHumidity();
   float t = dht.readTemperature();
   
-  // Cria um JSON para o App ler facilmente
   String json = "{\"temp\":\"" + String(t) + "\", \"umid\":\"" + String(h) + "\"}";
+  
+  // ADICIONE ESTA LINHA ABAIXO:
+  server.sendHeader("Access-Control-Allow-Origin", "*"); 
+  
   server.send(200, "application/json", json);
 }
 

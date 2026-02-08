@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>TermoLog Desktop</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { width: 100%; max-width: 600px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #333; }
+        .config { margin-bottom: 20px; display: flex; gap: 10px; }
+        input { flex: 1; padding: 10px; border: 2px solid #2196f3; border-radius: 5px; font-size: 16px; }
+        button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 5px; background: #2196f3; color: white; font-weight: bold; }
+        button.stop { background: #f44336; }
+        .display { display: flex; justify-content: space-between; margin-top: 20px; }
+        .card { background: #fff; border: 1px solid #ddd; width: 45%; padding: 20px; border-radius: 10px; text-align: center; }
+        .card label { font-size: 12px; color: #888; text-transform: uppercase; }
+        .card div { font-size: 36px; font-weight: bold; margin-top: 10px; }
+        #status { margin-top: 10px; font-size: 14px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>TermoLog Wi-Fi</h1>
+    
+    <div class="config">
+        <input type="text" id="ipInput" placeholder="Ex: 192.168.1.15" value="">
+        <button id="btnConectar" onclick="toggleMonitor()">CONECTAR</button>
+    </div>
+
+    <div id="status">Status: Desconectado</div>
+
+    <div class="display">
+        <div class="card">
+            <label>Temperatura</label>
+            <div id="temp">--°C</div>
+        </div>
+        <div class="card">
+            <label>Humidade</label>
+            <div id="umid">--%</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let interval = null;
+    let isMonitoring = false;
+
+    async function fetchDados() {
+        const ip = document.getElementById('ipInput').value;
+        const statusEl = document.getElementById('status');
+        
+        try {
+            // O ESP32 envia os dados no endpoint /data
+            const response = await fetch(`http://${ip}/data`);
+            const data = await response.json();
+            
+            document.getElementById('temp').innerText = `${data.temp}°C`;
+            document.getElementById('umid').innerText = `${data.umid}%`;
+            statusEl.innerText = "Status: Conectado e Atualizando...";
+            statusEl.style.color = "green";
+        } catch (error) {
+            statusEl.innerText = "Erro de conexão. Verifique o IP!";
+            statusEl.style.color = "red";
+        }
+    }
+
+    function toggleMonitor() {
+        const btn = document.getElementById('btnConectar');
+        isMonitoring = !isMonitoring;
+
+        if (isMonitoring) {
+            btn.innerText = "PARAR";
+            btn.classList.add('stop');
+            // Busca dados a cada 3 segundos, igual ao App
+            interval = setInterval(fetchDados, 3000); 
+            fetchDados();
+        } else {
+            btn.innerText = "CONECTAR";
+            btn.classList.remove('stop');
+            clearInterval(interval);
+            document.getElementById('status').innerText = "Status: Parado";
+        }
+    }
+</script>
+
+</body>
+</html>
