@@ -2,87 +2,106 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>TermoLog Desktop</title>
+    <title>TermoLog Pro - Multi-Sensor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        .container { width: 100%; max-width: 600px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #333; }
-        .config { margin-bottom: 20px; display: flex; gap: 10px; }
-        input { flex: 1; padding: 10px; border: 2px solid #2196f3; border-radius: 5px; font-size: 16px; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { width: 100%; max-width: 1000px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .config { display: flex; gap: 10px; align-items: center; justify-content: center; margin-bottom: 20px; }
+        .display { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 20px; }
+        .card { background: #fff; border: 1px solid #ddd; flex: 1; padding: 15px; border-radius: 10px; text-align: center; }
+        .card label { font-size: 11px; color: #888; text-transform: uppercase; }
+        .card div { font-size: 24px; font-weight: bold; margin-top: 5px; }
+        .chart-container { position: relative; height: 200px; width: 100%; margin-bottom: 15px; }
         button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 5px; background: #2196f3; color: white; font-weight: bold; }
         button.stop { background: #f44336; }
-        .display { display: flex; justify-content: space-between; margin-top: 20px; }
-        .card { background: #fff; border: 1px solid #ddd; width: 45%; padding: 20px; border-radius: 10px; text-align: center; }
-        .card label { font-size: 12px; color: #888; text-transform: uppercase; }
-        .card div { font-size: 36px; font-weight: bold; margin-top: 10px; }
-        #status { margin-top: 10px; font-size: 14px; text-align: center; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>TermoLog Wi-Fi</h1>
+    <h1>TermoLog Monitor</h1>
     
     <div class="config">
-        <input type="text" id="ipInput" placeholder="Ex: 192.168.1.15" value="">
-        <button id="btnConectar" onclick="toggleMonitor()">CONECTAR</button>
+        <button id="btnScan" onclick="escanear()">ESCANEAR REDE</button>
+        <input type="checkbox" id="checkPontos" onchange="renderizar()" checked> Exibir Pontos
     </div>
 
-    <div id="status">Status: Desconectado</div>
+    <div id="status" style="text-align:center; margin-bottom:10px;">Aguardando...</div>
 
     <div class="display">
-        <div class="card">
-            <label>Temperatura</label>
-            <div id="temp">--°C</div>
-        </div>
-        <div class="card">
-            <label>Humidade</label>
-            <div id="umid">--%</div>
-        </div>
+        <div class="card"><label>DHT11 Temp</label><div id="t1" style="color: #f44336;">--</div></div>
+        <div class="card"><label>DHT11 Umid</label><div id="u1" style="color: #2196f3;">--</div></div>
+        <div class="card"><label>DS18B20 Temp</label><div id="t2" style="color: #ff9800;">--</div></div>
     </div>
+
+    <div class="chart-container"><canvas id="chartT1"></canvas></div>
+    <div class="chart-container"><canvas id="chartU1"></canvas></div>
+    <div class="chart-container"><canvas id="chartT2"></canvas></div>
 </div>
 
 <script>
-    let interval = null;
-    let isMonitoring = false;
+    let ip = "termolog.local";
+    let charts = {};
+    let monitoring = false;
 
-    async function fetchDados() {
-        const ip = document.getElementById('ipInput').value;
-        const statusEl = document.getElementById('status');
-        
-        try {
-            // O ESP32 envia os dados no endpoint /data
-            const response = await fetch(`http://${ip}/data`);
-            const data = await response.json();
-            
-            document.getElementById('temp').innerText = `${data.temp}°C`;
-            document.getElementById('umid').innerText = `${data.umid}%`;
-            statusEl.innerText = "Status: Conectado e Atualizando...";
-            statusEl.style.color = "green";
-        } catch (error) {
-            statusEl.innerText = "Erro de conexão. Verifique o IP!";
-            statusEl.style.color = "red";
-        }
+    function initChart(id, label, color) {
+        return new Chart(document.getElementById(id).getContext('2d'), {
+            type: 'line',
+            data: { labels: [], datasets: [{ label: label, data: [], borderColor: color, fill: false, tension: 0.1, pointRadius: 3 }] },
+            options: { responsive: true, maintainAspectRatio: false, animation: false }
+        });
     }
 
-    function toggleMonitor() {
-        const btn = document.getElementById('btnConectar');
-        isMonitoring = !isMonitoring;
+    charts.t1 = initChart('chartT1', 'Temp DHT11 (°C)', '#f44336');
+    charts.u1 = initChart('chartU1', 'Umid DHT11 (%)', '#2196f3');
+    charts.t2 = initChart('chartT2', 'Temp DS18B20 (°C)', '#ff9800');
 
-        if (isMonitoring) {
-            btn.innerText = "PARAR";
-            btn.classList.add('stop');
-            // Busca dados a cada 3 segundos, igual ao App
-            interval = setInterval(fetchDados, 3000); 
-            fetchDados();
+    function renderizar() {
+        const r = document.getElementById('checkPontos').checked ? 3 : 0;
+        Object.values(charts).forEach(c => { c.data.datasets[0].pointRadius = r; c.update(); });
+    }
+
+    async function fetchData() {
+        try {
+            const res = await fetch(`http://${ip}/data`);
+            const data = await res.json();
+            const hora = new Date().toLocaleTimeString();
+
+            document.getElementById('t1').innerText = data.temp + "°C";
+            document.getElementById('u1').innerText = data.umid + "%";
+            document.getElementById('t2').innerText = data.temp_extra + "°C";
+
+            updateChart(charts.t1, hora, data.temp);
+            updateChart(charts.u1, hora, data.umid);
+            updateChart(charts.t2, hora, data.temp_extra);
+        } catch (e) { document.getElementById('status').innerText = "Erro ao conectar!"; }
+    }
+
+    function updateChart(c, h, v) { c.data.labels.push(h); c.data.datasets[0].data.push(v); c.update(); }
+
+    function escanear() {
+        const btn = document.getElementById('btnScan');
+        monitoring = !monitoring;
+        if(monitoring) {
+            btn.innerText = "PARAR"; btn.className = "stop";
+            window.timer = setInterval(fetchData, 5000);
+            fetchData();
         } else {
-            btn.innerText = "CONECTAR";
-            btn.classList.remove('stop');
-            clearInterval(interval);
-            document.getElementById('status').innerText = "Status: Parado";
+            btn.innerText = "ESCANEAR REDE"; btn.className = "";
+            clearInterval(window.timer);
         }
+
+        async function testarConexao() {
+    try {
+        const response = await fetch(`http://termolog.local/data`);
+        // ... sua lógica de sucesso
+    } catch (error) {
+        document.getElementById('status').innerHTML = 
+            "<span style='color:orange'>Dispositivo não encontrado. Verifique se você está na rede 'TermoLog-Config' para configurar o Wi-Fi.</span>";
+    }
+}
     }
 </script>
-
 </body>
 </html>
