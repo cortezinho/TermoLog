@@ -15,19 +15,22 @@
         .chart-container { position: relative; height: 200px; width: 100%; margin-bottom: 15px; }
         button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 5px; background: #2196f3; color: white; font-weight: bold; }
         button.stop { background: #f44336; }
+        #status-text { font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>TermoLog Monitor</h1>
+    <h1 style="text-align: center;">TermoLog Monitor</h1>
     
     <div class="config">
-        <button id="btnScan" onclick="escanear()">ESCANEAR REDE</button>
-        <input type="checkbox" id="checkPontos" onchange="renderizar()" checked> Exibir Pontos
+        <button id="btnScan" onclick="escanear()">ESCANEAR DISPOSITIVOS</button>
     </div>
 
-    <div id="status" style="text-align:center; margin-bottom:10px;">Aguardando...</div>
+    <div id="status" style="text-align:center; margin-bottom:10px;">
+        <span id="status-text" style="color: gray;">Aguardando...</span><br>
+        <input type="checkbox" id="checkPontos" onchange="renderizar()" checked> Exibir Pontos
+    </div>
 
     <div class="display">
         <div class="card"><label>DHT11 Temp</label><div id="t1" style="color: #f44336;">--</div></div>
@@ -63,10 +66,15 @@
     }
 
     async function fetchData() {
+        const statusText = document.getElementById('status-text');
         try {
             const res = await fetch(`http://${ip}/data`);
             const data = await res.json();
             const hora = new Date().toLocaleTimeString();
+
+            // Atualiza o texto para conectado
+            statusText.innerText = "Conectado ao ESP32";
+            statusText.style.color = "green";
 
             document.getElementById('t1').innerText = data.temp + "°C";
             document.getElementById('u1').innerText = data.umid + "%";
@@ -75,32 +83,35 @@
             updateChart(charts.t1, hora, data.temp);
             updateChart(charts.u1, hora, data.umid);
             updateChart(charts.t2, hora, data.temp_extra);
-        } catch (e) { document.getElementById('status').innerText = "Erro ao conectar!"; }
+        } catch (e) { 
+            statusText.innerText = "Erro ao conectar! Verifique a rede.";
+            statusText.style.color = "red";
+        }
     }
 
     function updateChart(c, h, v) { c.data.labels.push(h); c.data.datasets[0].data.push(v); c.update(); }
 
     function escanear() {
         const btn = document.getElementById('btnScan');
+        const statusText = document.getElementById('status-text');
+        
         monitoring = !monitoring;
+        
         if(monitoring) {
-            btn.innerText = "PARAR"; btn.className = "stop";
+            btn.innerText = "PARAR"; 
+            btn.className = "stop";
+            statusText.innerText = "Buscando dispositivo...";
+            statusText.style.color = "orange";
+            
             window.timer = setInterval(fetchData, 5000);
             fetchData();
         } else {
-            btn.innerText = "ESCANEAR REDE"; btn.className = "";
+            btn.innerText = "ESCANEAR DISPOSITIVOS"; 
+            btn.className = "";
+            statusText.innerText = "Aguardando...";
+            statusText.style.color = "gray";
             clearInterval(window.timer);
         }
-
-        async function testarConexao() {
-    try {
-        const response = await fetch(`http://termolog.local/data`);
-        // ... sua lógica de sucesso
-    } catch (error) {
-        document.getElementById('status').innerHTML = 
-            "<span style='color:orange'>Dispositivo não encontrado. Verifique se você está na rede 'TermoLog-Config' para configurar o Wi-Fi.</span>";
-    }
-}
     }
 </script>
 </body>
